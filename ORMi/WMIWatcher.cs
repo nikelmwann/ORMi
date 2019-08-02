@@ -75,7 +75,7 @@ namespace ORMi
         {
             if (_type != null)
             {
-                object o = TypeHelper.LoadObject(e.NewEvent, _type);
+                object o = TypeHelper.LoadObject(e.NewEvent, _type, watcher.Scope);
 
                 WMIEventArrived(this, new WMIEventArgs { Object = o });
             }

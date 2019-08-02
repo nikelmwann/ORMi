@@ -131,6 +131,9 @@ namespace ORMi
         /// <returns></returns>
         public static T ExecuteMethod<T>(object obj, dynamic parameters)
         {
+            var frame = new StackTrace().GetFrames().Skip(1).First(x => x.GetMethod().DeclaringType.Namespace != "System.Dynamic");
+            string methodName = frame.GetMethod().Name;
+
             WindowsIdentity windowsIdentity = WindowsIdentity.GetCurrent();
 
 #if NET45
@@ -140,10 +143,6 @@ namespace ORMi
             return WindowsIdentity.RunImpersonated(windowsIdentity.AccessToken, () =>
 #endif
             {
-                var frame = new StackTrace().GetFrames().Skip(1).First(x => x.GetMethod().DeclaringType.Namespace != "System.Dynamic");
-
-                string methodName = frame.GetMethod().Name;
-
                 ManagementClass genericClass = new ManagementClass(TypeHelper.GetNamespace(obj), TypeHelper.GetClassName(obj), null);
 
                 ManagementObject instance = TypeHelper.GetManagementObject(genericClass, obj);

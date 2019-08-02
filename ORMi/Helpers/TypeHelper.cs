@@ -37,19 +37,22 @@ namespace ORMi.Helpers
             return res;
         }
 
-        public static object LoadObject(ManagementBaseObject mo, Type t)
+        public static object LoadObject(ManagementBaseObject mbo, Type t, ManagementScope fallbackScope = null)
         {
+            if (mbo is ManagementObject mo)
+                return LoadObject(mo, t);
+
             var o = Activator.CreateInstance(t);
 
             foreach (PropertyInfo p in o.GetType().GetProperties())
             {
-                _SetPropertyValue(mo, p, o);
+                _SetPropertyValue(mbo, p, o, fallbackScope);
             }
 
             return o;
         }
 
-        private static void _SetPropertyValue(ManagementBaseObject mo, PropertyInfo p, object o)
+        private static void _SetPropertyValue(ManagementBaseObject mo, PropertyInfo p, object o, ManagementScope fallbackScope = null)
         {
             WMIIgnore ignoreProp = p.GetCustomAttribute<WMIIgnore>();
 
@@ -78,6 +81,15 @@ namespace ORMi.Helpers
                 {
                     p.SetValue(o, ManagementDateTimeConverter.ToDateTime((string)a), null);
                 }
+                else if (p.PropertyType.IsEnum && Enum.IsDefined(p.PropertyType, a))
+                {
+                    p.SetValue(o, Enum.ToObject(p.PropertyType, a));
+                }
+                else if (typeof(WMIInstance).IsAssignableFrom(p.PropertyType) && a is ManagementBaseObject nestedMo)
+                {
+                    // If the property is another WMI instance type, load it
+                    p.SetValue(o, LoadObject(nestedMo, p.PropertyType, fallbackScope));
+                }
                 else
                 {
                     var propertyType = p.PropertyType;
@@ -91,11 +103,17 @@ namespace ORMi.Helpers
             }
             else
             {
-                if (o.GetType().BaseType == typeof(WMIInstance))
+                if (o.GetType().BaseType == typeof(WMIInstance) && p.Name == nameof(WMIInstance.Scope))
                 {
-                    if (p.Name == "Scope")
+                    // If we have a ManagementObject with a scope, use that
+                    if (mo is ManagementObject smo)
                     {
-                        p.SetValue(o, ((ManagementObject)(mo)).Scope);
+                        p.SetValue(o, smo.Scope);
+                    }
+                    // Otherwise, use a fallback scope if provided
+                    else if(fallbackScope != null)
+                    {
+                        p.SetValue(o, fallbackScope);
                     }
                 }
             }
@@ -183,7 +201,7 @@ namespace ORMi.Helpers
 
                     if (propAtt == null)
                     {
-                        if (propertyInfo.GetValue(obj).GetType() == typeof(DateTime))
+                        if (propertyInfo.PropertyType == typeof(DateTime))
                         {
                             genericInstance[propertyInfo.Name.ToUpper()] = ManagementDateTimeConverter.ToDmtfDateTime(Convert.ToDateTime(propertyInfo.GetValue(obj)));
                         }
@@ -194,7 +212,7 @@ namespace ORMi.Helpers
                     }
                     else
                     {
-                        if (propertyInfo.GetValue(obj).GetType() == typeof(DateTime))
+                        if (propertyInfo.PropertyType == typeof(DateTime))
                         {
                             genericInstance[propAtt.Name.ToUpper()] = ManagementDateTimeConverter.ToDmtfDateTime(Convert.ToDateTime(propertyInfo.GetValue(obj)));
                         }
